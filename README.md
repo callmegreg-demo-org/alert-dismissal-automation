@@ -80,6 +80,7 @@ the reason directly in the dismissal request review.
    | Organization dismissal requests for code scanning | Read & write |
    | Organization dismissal requests for Dependabot | Read & write |
    | Secret scanning alert dismissal requests | Read & write |
+   | Members | Read-only |
 
 4. Set the following **Repository permissions**:
 
@@ -136,6 +137,9 @@ alert_types:
 
 # Organization to monitor (defaults to owner of GITHUB_REPOSITORY)
 # organization: my-org
+
+# Team whose members are exempt from auto-deny (use the team slug)
+# exempt_team: security-leads
 ```
 
 ---

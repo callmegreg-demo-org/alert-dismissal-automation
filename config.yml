@@ -19,6 +19,21 @@ deny_blank_comments: true
 case_sensitive: false
 
 # ---------------------------------------------------------------------------
+# EXEMPTIONS: Skip auto-deny for members of a specific team
+# ---------------------------------------------------------------------------
+# If set, members of this GitHub team will be exempt from automatic denial.
+# Their dismissal requests will be left open for human review regardless of
+# whether the comment meets the required criteria.
+#
+# Use the team **slug** (the URL-friendly name shown in the team's URL, e.g.
+# "security-leads" for https://github.com/orgs/my-org/teams/security-leads).
+#
+# Leave blank or comment out to disable exemptions — all requests will be
+# evaluated by the automation.
+#
+# exempt_team: security-leads
+
+# ---------------------------------------------------------------------------
 # ALERT TYPES: Which alert categories should be monitored?
 # ---------------------------------------------------------------------------
 # Supported values: code_scanning | secret_scanning | dependabot

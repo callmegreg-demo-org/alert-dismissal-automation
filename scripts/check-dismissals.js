@@ -45,6 +45,7 @@ const CASE_SENSITIVE = config.case_sensitive === true;
 const ALERT_TYPES = Array.isArray(config.alert_types)
   ? config.alert_types
   : ['code_scanning', 'secret_scanning', 'dependabot'];
+const EXEMPT_TEAM = (config.exempt_team || '').trim() || null;
 const DRY_RUN = process.env.DRY_RUN === 'true';
 
 // All new dismissal request endpoints require this API version header.
@@ -82,6 +83,60 @@ function getOrg() {
       'Set "organization" in config.yml or run inside a GitHub Actions context.'
   );
   process.exit(1);
+}
+
+// ---------------------------------------------------------------------------
+// Exempt team membership check
+// ---------------------------------------------------------------------------
+
+/**
+ * In-memory cache for team membership lookups.
+ * Maps "org/team/username" → boolean.
+ * @type {Map<string, boolean>}
+ */
+const teamMembershipCache = new Map();
+
+/**
+ * Returns true if the requester is a member of the configured exempt team.
+ * Returns false when no exempt team is configured or when the user is not a
+ * member.  Results are cached for the lifetime of this process run.
+ *
+ * @param {string} org
+ * @param {string|null|undefined} requester
+ * @returns {Promise<boolean>}
+ */
+async function isRequesterExempt(org, requester) {
+  if (!EXEMPT_TEAM || !requester) return false;
+
+  const cacheKey = `${org}/${EXEMPT_TEAM}/${requester}`;
+  if (teamMembershipCache.has(cacheKey)) {
+    return teamMembershipCache.get(cacheKey);
+  }
+
+  try {
+    const { data } = await octokit.request(
+      'GET /orgs/{org}/teams/{team_slug}/memberships/{username}',
+      {
+        org,
+        team_slug: EXEMPT_TEAM,
+        username: requester,
+      }
+    );
+    const isMember = data.state === 'active';
+    teamMembershipCache.set(cacheKey, isMember);
+    return isMember;
+  } catch (error) {
+    // 404 means the user is not a member (or the team doesn't exist).
+    if (error.status === 404) {
+      teamMembershipCache.set(cacheKey, false);
+      return false;
+    }
+    // For any other error, log a warning and proceed without exemption.
+    console.warn(
+      `     ⚠️  Could not verify exempt team membership for @${requester}: ${error.message}`
+    );
+    return false;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -253,6 +308,13 @@ async function processCodeScanningRequests(org) {
       continue;
     }
 
+    if (await isRequesterExempt(org, requester)) {
+      console.log(
+        `     🛡️ Request #${req.number} (${repoFullName} alert #${alertNumber}) — requester @${requester} is exempt (team: ${EXEMPT_TEAM}), leaving open for human review.`
+      );
+      continue;
+    }
+
     console.log(
       `     ❌ Request #${req.number} (${repoFullName} alert #${alertNumber}) — DENIED: ${result.reason}`
     );
@@ -317,6 +379,13 @@ async function processSecretScanningRequests(org) {
     if (result.valid) {
       console.log(
         `     ✅ Request #${req.number} (${repoFullName} alert #${alertNumber}) — valid comment, leaving open for human review.`
+      );
+      continue;
+    }
+
+    if (await isRequesterExempt(org, requester)) {
+      console.log(
+        `     🛡️ Request #${req.number} (${repoFullName} alert #${alertNumber}) — requester @${requester} is exempt (team: ${EXEMPT_TEAM}), leaving open for human review.`
       );
       continue;
     }
@@ -389,6 +458,13 @@ async function processDependabotRequests(org) {
       continue;
     }
 
+    if (await isRequesterExempt(org, requester)) {
+      console.log(
+        `     🛡️ Request #${req.number} (${repoFullName} alert #${alertNumber}) — requester @${requester} is exempt (team: ${EXEMPT_TEAM}), leaving open for human review.`
+      );
+      continue;
+    }
+
     console.log(
       `     ❌ Request #${req.number} (${repoFullName} alert #${alertNumber}) — DENIED: ${result.reason}`
     );
@@ -429,6 +505,7 @@ async function main() {
   console.log(`  deny_blank_comments : ${DENY_BLANK}`);
   console.log(`  case_sensitive      : ${CASE_SENSITIVE}`);
   console.log(`  alert_types         : ${ALERT_TYPES.join(', ')}`);
+  console.log(`  exempt_team         : ${EXEMPT_TEAM || '(none)'}`);
 
   console.log(`\nChecking open dismissal requests for org: ${org}…`);
 
@@ -451,5 +528,5 @@ main().catch((error) => {
 });
 
 // Export helpers for unit tests.
-module.exports = { validateDismissalComment, formatDenialMessage };
+module.exports = { validateDismissalComment, formatDenialMessage, isRequesterExempt };
 
