@@ -45,7 +45,7 @@ const CASE_SENSITIVE = config.case_sensitive === true;
 const ALERT_TYPES = Array.isArray(config.alert_types)
   ? config.alert_types
   : ['code_scanning', 'secret_scanning', 'dependabot'];
-const EXEMPT_TEAM = (config.exempt_team || '').trim() || null;
+const EXEMPT_TEAM = config.exempt_team?.trim() || null;
 const DRY_RUN = process.env.DRY_RUN === 'true';
 
 // All new dismissal request endpoints require this API version header.
